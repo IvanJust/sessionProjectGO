@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Файлы окружения с секретами
+.env
+.env.local
+
+# Бинарники
+bin/
+*.exe
+*.test
+*.out
+
+# Документация и CI
+README.md
+LICENSE
+.github/
+.gitlab-ci.yml
+
+# Настройки IDE
+.idea/
+.vscode/
+*.swp
+
+# Docker-файлы (не нужны внутри образа)
+Dockerfile
+docker-compose.yml
+.dockerignore
