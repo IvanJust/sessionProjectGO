@@ -1,37 +1,31 @@
-version: "3.9"
-
 services:
-  # ==================== PostgreSQL ====================
   postgres:
+    container_name: postgres
     image: postgres:16-alpine
-    container_name: auth-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER:-auth}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: ${DB_NAME:-authdb}
     ports:
-      - "${POSTGRES_EXTERNAL_PORT}:5432"
+      - "127.0.0.1:${POSTGRES_EXTERNAL_PORT:-5532}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Автоматически выполняем миграции при первом старте:
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - auth-net
 
-  # ==================== Redis ====================
   redis:
+    container_name: redis
     image: redis:7-alpine
-    container_name: auth-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_EXTERNAL_PORT:-56379}:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -42,24 +36,33 @@ services:
     networks:
       - auth-net
 
-  # ==================== Сервис аутентификации ====================
   app:
+    container_name: app
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: auth-app
     restart: unless-stopped
     ports:
-      - "${APP_EXTERNAL_PORT}:8080"
+      - "127.0.0.1:${APP_EXTERNAL_PORT:-8585}:8080"
     environment:
-      APP_PORT: ${APP_PORT}
+      APP_PORT: 8080
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      DB_SSLMODE: ${DB_SSLMODE}
-      JWT_SECRET: ${JWT_SECRET}
+      DB_USER: ${DB_USER:-auth}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-authdb}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      SESSION_TTL: ${SESSION_TTL:-24h}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
